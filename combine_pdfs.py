@@ -1,4 +1,4 @@
-#!/Users/sdrwacker/.local/share/combine-pdfs-venv/bin/python
+#!/usr/bin/env COMBINE_PDFS_VENV/bin/python
 """Combine PDFs and images into a single document with normalized page sizes."""
 
 import os
@@ -43,12 +43,16 @@ def draw_scaled_centered(context, width, height, draw_func):
     Quartz.CGContextRestoreGState(context)
 
 
+def create_file_url(path):
+    """Create a CFURLRef from a file path."""
+    return Quartz.CFURLCreateFromFileSystemRepresentation(
+        None, path.encode(), len(path), False
+    )
+
+
 def add_pdf_pages(context, pdf_path, target_rect):
     """Add all pages from a PDF, normalized to target size."""
-    url = Quartz.CFURLCreateFromFileSystemRepresentation(
-        None, pdf_path.encode(), len(pdf_path), False
-    )
-    pdf_doc = Quartz.CGPDFDocumentCreateWithURL(url)
+    pdf_doc = Quartz.CGPDFDocumentCreateWithURL(create_file_url(pdf_path))
 
     if pdf_doc is None:
         print(f"Warning: Cannot read {pdf_path}", file=sys.stderr)
@@ -64,11 +68,9 @@ def add_pdf_pages(context, pdf_path, target_rect):
         media_box = Quartz.CGPDFPageGetBoxRect(page, Quartz.kCGPDFMediaBox)
         Quartz.CGContextBeginPage(context, target_rect)
 
-        def draw_page():
-            Quartz.CGContextTranslateCTM(
-                context, -media_box.origin.x, -media_box.origin.y
-            )
-            Quartz.CGContextDrawPDFPage(context, page)
+        def draw_page(p=page, mb=media_box):
+            Quartz.CGContextTranslateCTM(context, -mb.origin.x, -mb.origin.y)
+            Quartz.CGContextDrawPDFPage(context, p)
 
         draw_scaled_centered(
             context, media_box.size.width, media_box.size.height, draw_page
@@ -80,10 +82,7 @@ def add_pdf_pages(context, pdf_path, target_rect):
 
 def add_image_page(context, image_path, target_rect):
     """Add an image as a page, normalized to target size."""
-    url = Quartz.CFURLCreateFromFileSystemRepresentation(
-        None, image_path.encode(), len(image_path), False
-    )
-    source = Quartz.CGImageSourceCreateWithURL(url, None)
+    source = Quartz.CGImageSourceCreateWithURL(create_file_url(image_path), None)
 
     if source is None:
         print(f"Warning: Cannot read {image_path}", file=sys.stderr)
@@ -99,9 +98,9 @@ def add_image_page(context, image_path, target_rect):
 
     Quartz.CGContextBeginPage(context, target_rect)
 
-    def draw_image():
-        rect = Quartz.CGRectMake(0, 0, width, height)
-        Quartz.CGContextDrawImage(context, rect, image)
+    def draw_image(img=image, w=width, h=height):
+        rect = Quartz.CGRectMake(0, 0, w, h)
+        Quartz.CGContextDrawImage(context, rect, img)
 
     draw_scaled_centered(context, width, height, draw_image)
     Quartz.CGContextEndPage(context)
@@ -111,11 +110,10 @@ def add_image_page(context, image_path, target_rect):
 
 def combine_files(input_paths, output_path):
     """Combine files into one PDF with normalized page sizes."""
-    url = Quartz.CFURLCreateFromFileSystemRepresentation(
-        None, output_path.encode(), len(output_path), False
-    )
     target_rect = Quartz.CGRectMake(0, 0, TARGET_WIDTH, TARGET_HEIGHT)
-    context = Quartz.CGPDFContextCreateWithURL(url, target_rect, None)
+    context = Quartz.CGPDFContextCreateWithURL(
+        create_file_url(output_path), target_rect, None
+    )
 
     if context is None:
         print(f"Error: Cannot create {output_path}", file=sys.stderr)

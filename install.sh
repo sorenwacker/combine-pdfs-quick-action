@@ -20,11 +20,14 @@ mkdir -p "$HOME/.local/bin"
 if [ ! -f "$VENV_PATH/bin/python" ]; then
     echo "Setting up Python environment..."
     python3 -m venv "$VENV_PATH"
-    "$VENV_PATH/bin/pip" install --quiet pyobjc-framework-Quartz
+    if ! "$VENV_PATH/bin/pip" install pyobjc-framework-Quartz; then
+        echo "Error: Failed to install Python dependencies" >&2
+        exit 1
+    fi
 fi
 
-# Copy the script
-cp "$SCRIPT_DIR/combine_pdfs.py" "$SCRIPT_INSTALL_PATH"
+# Copy the script and fix shebang path
+sed "s|COMBINE_PDFS_VENV|$VENV_PATH|g" "$SCRIPT_DIR/combine_pdfs.py" > "$SCRIPT_INSTALL_PATH"
 chmod +x "$SCRIPT_INSTALL_PATH"
 
 # Remove existing workflow if present
