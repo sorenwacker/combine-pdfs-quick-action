@@ -8,6 +8,7 @@ WORKFLOW_NAME="Combine PDFs"
 SERVICES_DIR="$HOME/Library/Services"
 WORKFLOW_PATH="$SERVICES_DIR/$WORKFLOW_NAME.workflow"
 SCRIPT_INSTALL_PATH="$HOME/.local/bin/combine_pdfs"
+VENV_PATH="$HOME/.local/share/combine-pdfs-venv"
 
 echo "Installing Combine PDFs Quick Action..."
 
@@ -15,7 +16,14 @@ echo "Installing Combine PDFs Quick Action..."
 mkdir -p "$SERVICES_DIR"
 mkdir -p "$HOME/.local/bin"
 
-# Copy the script (remove .py extension since it's bash now)
+# Set up Python virtual environment with Quartz if needed
+if [ ! -f "$VENV_PATH/bin/python" ]; then
+    echo "Setting up Python environment..."
+    python3 -m venv "$VENV_PATH"
+    "$VENV_PATH/bin/pip" install --quiet pyobjc-framework-Quartz
+fi
+
+# Copy the script
 cp "$SCRIPT_DIR/combine_pdfs.py" "$SCRIPT_INSTALL_PATH"
 chmod +x "$SCRIPT_INSTALL_PATH"
 

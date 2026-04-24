@@ -1,119 +1,168 @@
-#!/bin/bash
-# Combine PDFs and images into a single document with normalized page sizes.
-# Uses macOS built-in tools: sips for images, join for combining.
-# Reads file paths from stdin (one per line) or command line arguments.
+#!/Users/sdrwacker/.local/share/combine-pdfs-venv/bin/python
+"""Combine PDFs and images into a single document with normalized page sizes."""
 
-# Log for debugging
-exec 2>>/tmp/combine_pdfs_debug.log
-echo "=== $(date) ===" >&2
-echo "Args: $@" >&2
-echo "Arg count: $#" >&2
+import os
+import subprocess
+import sys
+from datetime import datetime
 
-set -e
+import Quartz
 
-# Collect input files from stdin or arguments
-FILES=()
-if [ $# -gt 0 ]; then
-    echo "Reading from arguments" >&2
-    for f in "$@"; do
-        FILES+=("$f")
-    done
-else
-    echo "Reading from stdin" >&2
-    while IFS= read -r line; do
-        [ -n "$line" ] && FILES+=("$line")
-    done
-fi
+# US Letter size in points (8.5 x 11 inches at 72 DPI)
+TARGET_WIDTH = 612.0
+TARGET_HEIGHT = 792.0
 
-echo "Files collected: ${#FILES[@]}" >&2
-printf '%s\n' "${FILES[@]}" >&2
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.gif', '.bmp', '.heic'}
+PDF_EXTENSIONS = {'.pdf'}
+SUPPORTED_EXTENSIONS = IMAGE_EXTENSIONS | PDF_EXTENSIONS
 
-if [ ${#FILES[@]} -lt 2 ]; then
-    osascript -e 'display notification "Need at least 2 files to combine" with title "Combine PDFs"'
-    echo "Error: Need at least 2 files to combine" >&2
-    exit 1
-fi
 
-# Get output directory from first file
-OUTPUT_DIR="$(dirname "${FILES[0]}")"
-DATESTAMP="$(date +%y%m%d)"
-OUTPUT_FILE="$OUTPUT_DIR/$DATESTAMP-combined.pdf"
+def notify(message, title="Combine PDFs"):
+    """Show macOS notification."""
+    subprocess.run([
+        'osascript', '-e',
+        f'display notification "{message}" with title "{title}"'
+    ], capture_output=True)
 
-# Create temp directory
-TEMP_DIR="$(mktemp -d)"
-trap "rm -rf '$TEMP_DIR'" EXIT
 
-# US Letter size in pixels at 72 DPI
-PAGE_WIDTH=612
-PAGE_HEIGHT=792
+def draw_scaled_centered(context, width, height, draw_func):
+    """Scale and center content to fit target page size."""
+    scale_x = TARGET_WIDTH / width
+    scale_y = TARGET_HEIGHT / height
+    scale = min(scale_x, scale_y)
 
-convert_to_pdf() {
-    local input="$1"
-    local output="$2"
-    local ext="${input##*.}"
-    ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
+    scaled_width = width * scale
+    scaled_height = height * scale
+    offset_x = (TARGET_WIDTH - scaled_width) / 2
+    offset_y = (TARGET_HEIGHT - scaled_height) / 2
 
-    case "$ext" in
-        pdf)
-            cp "$input" "$output"
-            ;;
-        png|jpg|jpeg|tiff|tif|gif|bmp|heic)
-            # Get image dimensions
-            local img_width img_height
-            img_width=$(sips -g pixelWidth "$input" 2>/dev/null | tail -1 | awk '{print $2}')
-            img_height=$(sips -g pixelHeight "$input" 2>/dev/null | tail -1 | awk '{print $2}')
+    Quartz.CGContextSaveGState(context)
+    Quartz.CGContextTranslateCTM(context, offset_x, offset_y)
+    Quartz.CGContextScaleCTM(context, scale, scale)
+    draw_func()
+    Quartz.CGContextRestoreGState(context)
 
-            # Calculate scale to fit US Letter while preserving aspect ratio
-            local scale_x scale_y scale
-            scale_x=$(echo "scale=6; $PAGE_WIDTH / $img_width" | bc)
-            scale_y=$(echo "scale=6; $PAGE_HEIGHT / $img_height" | bc)
 
-            if (( $(echo "$scale_x < $scale_y" | bc -l) )); then
-                scale="$scale_x"
-            else
-                scale="$scale_y"
-            fi
+def add_pdf_pages(context, pdf_path, target_rect):
+    """Add all pages from a PDF, normalized to target size."""
+    url = Quartz.CFURLCreateFromFileSystemRepresentation(
+        None, pdf_path.encode(), len(pdf_path), False
+    )
+    pdf_doc = Quartz.CGPDFDocumentCreateWithURL(url)
 
-            # Calculate new dimensions
-            local new_width new_height
-            new_width=$(echo "scale=0; $img_width * $scale / 1" | bc)
-            new_height=$(echo "scale=0; $img_height * $scale / 1" | bc)
+    if pdf_doc is None:
+        print(f"Warning: Cannot read {pdf_path}", file=sys.stderr)
+        return 0
 
-            # Create resized image and convert to PDF
-            local temp_img="$TEMP_DIR/temp_$(basename "$input")"
-            sips --resampleHeightWidth "$new_height" "$new_width" "$input" --out "$temp_img" >/dev/null 2>&1
-            sips -s format pdf "$temp_img" --out "$output" >/dev/null 2>&1
-            ;;
-        *)
-            echo "Warning: Skipping unsupported file $input" >&2
-            return 1
-            ;;
-    esac
-}
+    page_count = Quartz.CGPDFDocumentGetNumberOfPages(pdf_doc)
 
-# Convert all inputs to PDFs
-PDF_LIST=()
-counter=0
-for file in "${FILES[@]}"; do
-    if [ -f "$file" ]; then
-        temp_pdf="$TEMP_DIR/$(printf '%04d' $counter).pdf"
-        if convert_to_pdf "$file" "$temp_pdf"; then
-            PDF_LIST+=("$temp_pdf")
-        fi
-        ((counter++))
-    fi
-done
+    for i in range(1, page_count + 1):
+        page = Quartz.CGPDFDocumentGetPage(pdf_doc, i)
+        if not page:
+            continue
 
-echo "PDFs to combine: ${#PDF_LIST[@]}" >&2
+        media_box = Quartz.CGPDFPageGetBoxRect(page, Quartz.kCGPDFMediaBox)
+        Quartz.CGContextBeginPage(context, target_rect)
 
-if [ ${#PDF_LIST[@]} -lt 2 ]; then
-    osascript -e 'display notification "Need at least 2 valid files" with title "Combine PDFs"'
-    echo "Error: Need at least 2 valid files to combine" >&2
-    exit 1
-fi
+        def draw_page():
+            Quartz.CGContextTranslateCTM(
+                context, -media_box.origin.x, -media_box.origin.y
+            )
+            Quartz.CGContextDrawPDFPage(context, page)
 
-# Combine PDFs using macOS built-in join tool
-"/System/Library/Automator/Combine PDF Pages.action/Contents/MacOS/join" -o "$OUTPUT_FILE" "${PDF_LIST[@]}"
+        draw_scaled_centered(
+            context, media_box.size.width, media_box.size.height, draw_page
+        )
+        Quartz.CGContextEndPage(context)
 
-osascript -e "display notification \"Created: $(basename "$OUTPUT_FILE")\" with title \"Combine PDFs\""
-echo "Created: $OUTPUT_FILE" >&2
+    return page_count
+
+
+def add_image_page(context, image_path, target_rect):
+    """Add an image as a page, normalized to target size."""
+    url = Quartz.CFURLCreateFromFileSystemRepresentation(
+        None, image_path.encode(), len(image_path), False
+    )
+    source = Quartz.CGImageSourceCreateWithURL(url, None)
+
+    if source is None:
+        print(f"Warning: Cannot read {image_path}", file=sys.stderr)
+        return 0
+
+    image = Quartz.CGImageSourceCreateImageAtIndex(source, 0, None)
+    if image is None:
+        print(f"Warning: Invalid image {image_path}", file=sys.stderr)
+        return 0
+
+    width = Quartz.CGImageGetWidth(image)
+    height = Quartz.CGImageGetHeight(image)
+
+    Quartz.CGContextBeginPage(context, target_rect)
+
+    def draw_image():
+        rect = Quartz.CGRectMake(0, 0, width, height)
+        Quartz.CGContextDrawImage(context, rect, image)
+
+    draw_scaled_centered(context, width, height, draw_image)
+    Quartz.CGContextEndPage(context)
+
+    return 1
+
+
+def combine_files(input_paths, output_path):
+    """Combine files into one PDF with normalized page sizes."""
+    url = Quartz.CFURLCreateFromFileSystemRepresentation(
+        None, output_path.encode(), len(output_path), False
+    )
+    target_rect = Quartz.CGRectMake(0, 0, TARGET_WIDTH, TARGET_HEIGHT)
+    context = Quartz.CGPDFContextCreateWithURL(url, target_rect, None)
+
+    if context is None:
+        print(f"Error: Cannot create {output_path}", file=sys.stderr)
+        return False
+
+    total_pages = 0
+    for path in input_paths:
+        ext = os.path.splitext(path)[1].lower()
+        if ext in PDF_EXTENSIONS:
+            total_pages += add_pdf_pages(context, path, target_rect)
+        elif ext in IMAGE_EXTENSIONS:
+            total_pages += add_image_page(context, path, target_rect)
+
+    Quartz.CGPDFContextClose(context)
+    return total_pages > 0
+
+
+def main():
+    # Read file paths from stdin or command line
+    if len(sys.argv) > 1:
+        files = sys.argv[1:]
+    else:
+        files = [line.strip() for line in sys.stdin if line.strip()]
+
+    # Filter and sort supported files
+    supported = sorted([
+        f for f in files
+        if os.path.isfile(f) and os.path.splitext(f)[1].lower() in SUPPORTED_EXTENSIONS
+    ])
+
+    if len(supported) < 2:
+        notify("Need at least 2 files to combine")
+        print("Error: Need at least 2 supported files", file=sys.stderr)
+        sys.exit(1)
+
+    # Generate output path
+    output_dir = os.path.dirname(supported[0]) or '.'
+    datestamp = datetime.now().strftime('%y%m%d')
+    output_path = os.path.join(output_dir, f'{datestamp}-combined.pdf')
+
+    if combine_files(supported, output_path):
+        notify(f"Created: {os.path.basename(output_path)}")
+        print(f"Created: {output_path}")
+    else:
+        notify("Failed to create PDF")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
