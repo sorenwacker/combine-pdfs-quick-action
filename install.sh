@@ -25,7 +25,7 @@ rm -rf "$WORKFLOW_PATH"
 # Create workflow bundle structure
 mkdir -p "$WORKFLOW_PATH/Contents"
 
-# Create Info.plist - minimal version
+# Create Info.plist with service declaration
 cat > "$WORKFLOW_PATH/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -35,6 +35,22 @@ cat > "$WORKFLOW_PATH/Contents/Info.plist" << 'PLIST'
 	<string>Combine PDFs</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.user.combine-pdfs</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Combine PDFs</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>runWorkflowAsService</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
 PLIST
