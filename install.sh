@@ -49,6 +49,12 @@ cat > "$WORKFLOW_PATH/Contents/Info.plist" << 'PLIST'
             <key>NSSendFileTypes</key>
             <array>
                 <string>com.adobe.pdf</string>
+                <string>public.png</string>
+                <string>public.jpeg</string>
+                <string>public.tiff</string>
+                <string>com.compuserve.gif</string>
+                <string>com.microsoft.bmp</string>
+                <string>public.heic</string>
             </array>
         </dict>
     </array>
@@ -246,8 +252,9 @@ WFLOW
 
 echo "Installation complete."
 echo ""
-echo "To use: Select multiple PDF files in Finder, right-click, and choose"
+echo "To use: Select multiple PDFs or images in Finder, right-click, and choose"
 echo "        Quick Actions > Combine PDFs"
 echo ""
-echo "The combined file will be created in the same folder as the selected files."
+echo "Supported formats: PDF, PNG, JPG, TIFF, GIF, BMP, HEIC"
+echo "Output: YYMMDD-combined.pdf in the same folder"
 echo "All pages are normalized to US Letter size (8.5 x 11 inches)."
