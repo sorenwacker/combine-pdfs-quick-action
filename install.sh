@@ -1,22 +1,22 @@
 #!/bin/bash
-# Install the Merge PDFs Quick Action for macOS Finder
+# Install the Combine PDFs Quick Action for macOS Finder
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKFLOW_NAME="Merge PDFs"
+WORKFLOW_NAME="Combine PDFs"
 SERVICES_DIR="$HOME/Library/Services"
 WORKFLOW_PATH="$SERVICES_DIR/$WORKFLOW_NAME.workflow"
-SCRIPT_INSTALL_PATH="$HOME/.local/bin/merge_pdfs.py"
+SCRIPT_INSTALL_PATH="$HOME/.local/bin/combine_pdfs.py"
 
-echo "Installing Merge PDFs Quick Action..."
+echo "Installing Combine PDFs Quick Action..."
 
 # Create directories
 mkdir -p "$SERVICES_DIR"
 mkdir -p "$HOME/.local/bin"
 
 # Copy the Python script
-cp "$SCRIPT_DIR/merge_pdfs.py" "$SCRIPT_INSTALL_PATH"
+cp "$SCRIPT_DIR/combine_pdfs.py" "$SCRIPT_INSTALL_PATH"
 chmod +x "$SCRIPT_INSTALL_PATH"
 
 # Remove existing workflow if present
@@ -37,7 +37,7 @@ cat > "$WORKFLOW_PATH/Contents/Info.plist" << 'PLIST'
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Merge PDFs</string>
+                <string>Combine PDFs</string>
             </dict>
             <key>NSMessage</key>
             <string>runWorkflowAsService</string>
@@ -112,7 +112,7 @@ cat > "$WORKFLOW_PATH/Contents/document.wflow" << WFLOW
                 <key>ActionParameters</key>
                 <dict>
                     <key>COMMAND_STRING</key>
-                    <string>"$HOME/.local/bin/merge_pdfs.py" "\$@"</string>
+                    <string>"$HOME/.local/bin/combine_pdfs.py" "\$@"</string>
                     <key>CheckedForUserDefaultShell</key>
                     <true/>
                     <key>inputMethod</key>
@@ -247,6 +247,7 @@ WFLOW
 echo "Installation complete."
 echo ""
 echo "To use: Select multiple PDF files in Finder, right-click, and choose"
-echo "        Quick Actions > Merge PDFs"
+echo "        Quick Actions > Combine PDFs"
 echo ""
-echo "The merged file will be created in the same folder as the selected files."
+echo "The combined file will be created in the same folder as the selected files."
+echo "All pages are normalized to US Letter size (8.5 x 11 inches)."
