@@ -13,8 +13,8 @@ A Finder Quick Action to combine multiple PDFs and images into a single document
 ## Installation
 
 ```bash
-git clone https://github.com/sdrwacker/macos-fixes.git
-cd macos-fixes
+git clone https://github.com/sorenwacker/combine-pdfs-quick-action.git
+cd combine-pdfs-quick-action
 ./install.sh
 ```
 
